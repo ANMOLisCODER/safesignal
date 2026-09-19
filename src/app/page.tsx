@@ -1,69 +1,253 @@
-import Image from "next/image";
+import {
+  ArrowUpRight,
+  FileWarning,
+  Map,
+  ShieldCheck,
+  Siren,
+  Users,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AppShell } from "@/components/shell/app-shell";
+
+const stats = [
+  {
+    title: "Community reports",
+    value: "1,284",
+    change: "+12.4%",
+    description: "from the previous 7 days",
+    icon: FileWarning,
+  },
+  {
+    title: "Active safety zones",
+    value: "18",
+    change: "+3",
+    description: "emerging patterns detected",
+    icon: Map,
+  },
+  {
+    title: "Verified signals",
+    value: "847",
+    change: "66%",
+    description: "of recent reports",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Community reach",
+    value: "24.8K",
+    change: "+8.2%",
+    description: "people protected by signals",
+    icon: Users,
+  },
+];
+
+const recentSignals = [
+  {
+    location: "Central Market Road",
+    type: "Harassment",
+    reports: 14,
+    status: "Emerging",
+  },
+  {
+    location: "West Station Exit",
+    type: "Loitering",
+    reports: 9,
+    status: "Monitoring",
+  },
+  {
+    location: "College Avenue",
+    type: "Unsafe behaviour",
+    reports: 7,
+    status: "Monitoring",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <AppShell>
+      <div className="space-y-8">
+        <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <Badge variant="secondary" className="rounded-full px-3 py-1">
+                <span className="mr-1.5 size-1.5 rounded-full bg-emerald-500" />
+                Live safety network
+              </Badge>
+            </div>
+
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Good evening.
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+              Monitor community safety signals, discover emerging patterns,
+              and help make public spaces safer.
+            </p>
+          </div>
+
+          <Button className="rounded-xl" size="lg">
+            <FileWarning className="size-4" />
+            Report a safety issue
+          </Button>
+        </section>
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map((stat) => {
+            const Icon = stat.icon;
+
+            return (
+              <Card key={stat.title} className="rounded-2xl">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardDescription>{stat.title}</CardDescription>
+
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-muted">
+                    <Icon className="size-4.5 text-muted-foreground" />
+                  </div>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="flex items-end gap-2">
+                    <p className="text-2xl font-semibold tracking-tight">
+                      {stat.value}
+                    </p>
+                    <span className="mb-1 text-xs font-medium text-emerald-600">
+                      {stat.change}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {stat.description}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+          <Card className="overflow-hidden rounded-2xl">
+            <CardHeader className="flex flex-row items-start justify-between">
+              <div>
+                <CardTitle>Emerging safety patterns</CardTitle>
+                <CardDescription className="mt-1">
+                  Signals currently being monitored by the network.
+                </CardDescription>
+              </div>
+
+              <Button variant="ghost" size="sm" className="rounded-lg">
+                View all
+                <ArrowUpRight className="size-4" />
+              </Button>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+              {recentSignals.map((signal) => (
+                <div
+                  key={signal.location}
+                  className="flex flex-col gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Map className="size-4 text-muted-foreground" />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium">
+                        {signal.location}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {signal.type} · {signal.reports} community signals
+                      </p>
+                    </div>
+                  </div>
+
+                  <Badge
+                    variant={
+                      signal.status === "Emerging" ? "default" : "secondary"
+                    }
+                    className="w-fit rounded-full"
+                  >
+                    {signal.status}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl">
+            <CardHeader>
+              <CardTitle>Quick actions</CardTitle>
+              <CardDescription>
+                Common actions available from your safety dashboard.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+              <Button
+                variant="outline"
+                className="h-auto w-full justify-start rounded-xl p-4"
+              >
+                <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                  <FileWarning className="size-4" />
+                </div>
+
+                <div className="ml-3 text-left">
+                  <p className="text-sm font-medium">Report anonymously</p>
+                  <p className="text-xs text-muted-foreground">
+                    Flag an unsafe moment in seconds
+                  </p>
+                </div>
+
+                <ArrowUpRight className="ml-auto size-4 text-muted-foreground" />
+              </Button>
+
+              <Button
+                variant="outline"
+                className="h-auto w-full justify-start rounded-xl p-4"
+              >
+                <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                  <Map className="size-4" />
+                </div>
+
+                <div className="ml-3 text-left">
+                  <p className="text-sm font-medium">Open safety map</p>
+                  <p className="text-xs text-muted-foreground">
+                    Explore nearby community signals
+                  </p>
+                </div>
+
+                <ArrowUpRight className="ml-auto size-4 text-muted-foreground" />
+              </Button>
+
+              <Button
+                variant="outline"
+                className="h-auto w-full justify-start rounded-xl p-4"
+              >
+                <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                  <Siren className="size-4" />
+                </div>
+
+                <div className="ml-3 text-left">
+                  <p className="text-sm font-medium">Emergency help</p>
+                  <p className="text-xs text-muted-foreground">
+                    Access emergency actions
+                  </p>
+                </div>
+
+                <ArrowUpRight className="ml-auto size-4 text-muted-foreground" />
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    </AppShell>
   );
 }
