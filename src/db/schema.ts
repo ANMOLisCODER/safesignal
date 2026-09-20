@@ -51,6 +51,8 @@ export const reports = pgTable("reports", {
   
 
   locationHash: text("location_hash").notNull(),
+  zoneLatitude: real("zone_latitude"),
+zoneLongitude: real("zone_longitude"),
 
   occurredAt: timestamp("occurred_at", {
     withTimezone: true,
