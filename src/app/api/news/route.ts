@@ -8,6 +8,25 @@ type NewsItem = {
   publishedAt: string;
   url: string;
   category: string;
+  imageUrl?: string | null;
+};
+
+type NewsDataArticle = {
+  article_id?: string;
+  title?: string;
+  description?: string | null;
+  link?: string;
+  pubDate?: string;
+  source_name?: string | null;
+  category?: string[] | string | null;
+  image_url?: string | null;
+};
+
+type NewsDataResponse = {
+  status?: string;
+  totalResults?: number;
+  results?: NewsDataArticle[];
+  message?: string;
 };
 
 const fallbackNews: NewsItem[] = [
@@ -43,25 +62,113 @@ const fallbackNews: NewsItem[] = [
   },
 ];
 
+function getCategory(article: NewsDataArticle): string {
+  if (Array.isArray(article.category) && article.category.length > 0) {
+    return article.category[0];
+  }
+
+  if (typeof article.category === "string" && article.category.trim()) {
+    return article.category;
+  }
+
+  return "Safety";
+}
+
+function normalizeArticles(
+  articles: NewsDataArticle[],
+): NewsItem[] {
+  return articles
+    .filter(
+      (article) =>
+        Boolean(article.article_id) &&
+        Boolean(article.title) &&
+        Boolean(article.link),
+    )
+    .map((article) => ({
+      id: article.article_id as string,
+      title: article.title as string,
+      summary:
+        article.description?.trim() ||
+        "Read the full article for more details.",
+      source: article.source_name?.trim() || "News Source",
+      publishedAt: article.pubDate || new Date().toISOString(),
+      url: article.link as string,
+      category: getCategory(article),
+      imageUrl: article.image_url || null,
+    }));
+}
+
 export async function GET() {
-  try {
+  const apiKey = process.env.NEWSDATA_API_KEY;
+
+  if (!apiKey) {
+    console.warn(
+      "NEWSDATA_API_KEY is not configured. Using fallback news.",
+    );
+
     return NextResponse.json({
       success: true,
       source: "fallback",
+      degraded: true,
       items: fallbackNews,
     });
-  } catch (error) {
-    console.error(
-      "News feed request failed:",
-      error,
+  }
+
+  try {
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      q: "women safety OR public safety OR harassment OR crime",
+      country: "in",
+      language: "en",
+      removeduplicate: "1",
+    });
+
+    const response = await fetch(
+      `https://newsdata.io/api/1/latest?${params.toString()}`,
+      {
+        next: {
+          revalidate: 900,
+        },
+      },
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Unable to load news feed.",
-      },
-      { status: 500 },
-    );
+    if (!response.ok) {
+      throw new Error(
+        `NewsData.io returned HTTP ${response.status}`,
+      );
+    }
+
+    const data = (await response.json()) as NewsDataResponse;
+
+    const items = normalizeArticles(data.results ?? []);
+
+    if (items.length === 0) {
+      console.warn(
+        "NewsData.io returned no usable articles. Using fallback news.",
+      );
+
+      return NextResponse.json({
+        success: true,
+        source: "fallback",
+        degraded: true,
+        items: fallbackNews,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      source: "newsdata",
+      degraded: false,
+      items,
+    });
+  } catch (error) {
+    console.error("NewsData.io request failed:", error);
+
+    return NextResponse.json({
+      success: true,
+      source: "fallback",
+      degraded: true,
+      items: fallbackNews,
+    });
   }
 }
