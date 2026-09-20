@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -32,6 +32,26 @@ const statusByAction = {
   resolve: "resolved",
   dismiss: "dismissed",
 } as const;
+
+const allowedTransitions: Record<
+  string,
+  string[]
+> = {
+  new: [
+    "acknowledge",
+    "dismiss",
+  ],
+  acknowledged: [
+    "investigate",
+    "dismiss",
+  ],
+  investigating: [
+    "resolve",
+    "dismiss",
+  ],
+  resolved: [],
+  dismissed: [],
+};
 
 type RouteContext = {
   params: Promise<{
@@ -92,18 +112,43 @@ export async function POST(
       );
     }
 
-    const action =
+    const currentStatus =
+      alert[0].status;
+
+    const requestedAction =
       result.data.action;
 
+    const allowedActions =
+      allowedTransitions[
+        currentStatus
+      ] ?? [];
+
+    if (
+      !allowedActions.includes(
+        requestedAction,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `Action "${requestedAction}" is not allowed when the alert status is "${currentStatus}".`,
+        },
+        { status: 409 },
+      );
+    }
+
     const newStatus =
-      statusByAction[action];
+      statusByAction[
+        requestedAction
+      ];
 
     const createdAction =
       await db
         .insert(authorityActions)
         .values({
           alertId,
-          action,
+          action: requestedAction,
           notes:
             result.data.notes ??
             null,
@@ -124,14 +169,13 @@ export async function POST(
       .update(patternAlerts)
       .set({
         status: newStatus,
-        lastUpdatedAt: new Date(),
+        lastUpdatedAt:
+          new Date(),
       })
       .where(
-        and(
-          eq(
-            patternAlerts.id,
-            alertId,
-          ),
+        eq(
+          patternAlerts.id,
+          alertId,
         ),
       );
 
@@ -142,6 +186,8 @@ export async function POST(
           createdAction[0],
         alert: {
           id: alertId,
+          previousStatus:
+            currentStatus,
           status: newStatus,
         },
       },

@@ -34,6 +34,12 @@ type AlertStatus =
   | "resolved"
   | "dismissed";
 
+type AuthorityAction =
+  | "acknowledge"
+  | "investigate"
+  | "resolve"
+  | "dismiss";
+
 type AuthorityAlert = {
   id: string;
   locationHash: string;
@@ -52,6 +58,11 @@ type AuthorityAlert = {
 type AlertsResponse = {
   success: boolean;
   alerts?: AuthorityAlert[];
+  error?: string;
+};
+
+type ActionResponse = {
+  success: boolean;
   error?: string;
 };
 
@@ -106,6 +117,70 @@ function formatDate(
   ).format(new Date(value));
 }
 
+function getActionButtons(
+  status: AlertStatus,
+) {
+  switch (status) {
+    case "new":
+      return [
+        {
+          action:
+            "acknowledge" as AuthorityAction,
+          label: "Acknowledge",
+          variant:
+            "default" as const,
+        },
+        {
+          action:
+            "dismiss" as AuthorityAction,
+          label: "Dismiss",
+          variant:
+            "outline" as const,
+        },
+      ];
+
+    case "acknowledged":
+      return [
+        {
+          action:
+            "investigate" as AuthorityAction,
+          label: "Start investigation",
+          variant:
+            "default" as const,
+        },
+        {
+          action:
+            "dismiss" as AuthorityAction,
+          label: "Dismiss",
+          variant:
+            "outline" as const,
+        },
+      ];
+
+    case "investigating":
+      return [
+        {
+          action:
+            "resolve" as AuthorityAction,
+          label: "Mark resolved",
+          variant:
+            "default" as const,
+        },
+        {
+          action:
+            "dismiss" as AuthorityAction,
+          label: "Dismiss",
+          variant:
+            "outline" as const,
+        },
+      ];
+
+    case "resolved":
+    case "dismissed":
+      return [];
+  }
+}
+
 export default function AuthorityDashboardPage() {
   const [alerts, setAlerts] = useState<
     AuthorityAlert[]
@@ -115,6 +190,12 @@ export default function AuthorityDashboardPage() {
     useState(true);
 
   const [error, setError] =
+    useState<string | null>(null);
+
+  const [actionError, setActionError] =
+    useState<string | null>(null);
+
+  const [activeAction, setActiveAction] =
     useState<string | null>(null);
 
   const loadAlerts = useCallback(
@@ -167,6 +248,71 @@ export default function AuthorityDashboardPage() {
   useEffect(() => {
     void loadAlerts();
   }, [loadAlerts]);
+
+  async function handleAction(
+    alertId: string,
+    action: AuthorityAction,
+  ) {
+    const actionKey =
+      `${alertId}:${action}`;
+
+    setActiveAction(actionKey);
+    setActionError(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/authority/alerts/${alertId}/actions`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action,
+              notes:
+                action === "acknowledge"
+                  ? "Pattern reviewed and acknowledged from the authority dashboard."
+                  : action ===
+                      "investigate"
+                    ? "Investigation started from the authority dashboard."
+                    : action === "resolve"
+                      ? "Pattern investigation marked resolved from the authority dashboard."
+                      : "Pattern alert dismissed from the authority dashboard.",
+            }),
+          },
+        );
+
+      const result =
+        (await response.json()) as ActionResponse;
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result.error ??
+            "Unable to update alert.",
+        );
+      }
+
+      await loadAlerts();
+    } catch (requestError) {
+      console.error(
+        "Authority action failed:",
+        requestError,
+      );
+
+      setActionError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update alert.",
+      );
+    } finally {
+      setActiveAction(null);
+    }
+  }
 
   const activeAlerts =
     alerts.filter(
@@ -349,6 +495,20 @@ export default function AuthorityDashboardPage() {
             </Card>
           )}
 
+          {actionError && (
+            <Card className="mb-4 rounded-2xl border-destructive/30 bg-destructive/5">
+              <CardContent className="p-5">
+                <p className="font-medium text-destructive">
+                  Action failed
+                </p>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {actionError}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {isLoading && !error && (
             <div className="grid gap-4">
               {[1, 2].map(
@@ -398,118 +558,179 @@ export default function AuthorityDashboardPage() {
             alerts.length > 0 && (
               <div className="grid gap-4">
                 {alerts.map(
-                  (alert) => (
-                    <Card
-                      key={alert.id}
-                      className="rounded-2xl"
-                    >
-                      <CardHeader className="gap-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Badge
-                                variant="outline"
-                                className={severityClass(
-                                  alert.severity,
-                                )}
-                              >
-                                {alert.severity}
-                              </Badge>
+                  (alert) => {
+                    const actionButtons =
+                      getActionButtons(
+                        alert.status,
+                      );
 
-                              <Badge
-                                variant="outline"
-                                className={statusClass(
-                                  alert.status,
-                                )}
-                              >
-                                {alert.status}
-                              </Badge>
+                    return (
+                      <Card
+                        key={alert.id}
+                        className="rounded-2xl"
+                      >
+                        <CardHeader className="gap-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={severityClass(
+                                    alert.severity,
+                                  )}
+                                >
+                                  {alert.severity}
+                                </Badge>
+
+                                <Badge
+                                  variant="outline"
+                                  className={statusClass(
+                                    alert.status,
+                                  )}
+                                >
+                                  {alert.status}
+                                </Badge>
+                              </div>
+
+                              <CardTitle className="mt-3 text-lg">
+                                {alert.title}
+                              </CardTitle>
                             </div>
 
-                            <CardTitle className="mt-3 text-lg">
-                              {alert.title}
-                            </CardTitle>
+                            <div className="shrink-0 text-left sm:text-right">
+                              <p className="text-2xl font-semibold">
+                                {Math.round(
+                                  alert.confidenceScore *
+                                    100,
+                                )}
+                                %
+                              </p>
+
+                              <p className="text-xs text-muted-foreground">
+                                confidence
+                              </p>
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                        <CardContent>
+                          {alert.description && (
+                            <p className="text-sm leading-6 text-muted-foreground">
+                              {alert.description}
+                            </p>
+                          )}
+
+                          <Separator className="my-5" />
+
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Reports
+                              </p>
+
+                              <p className="mt-1 font-semibold">
+                                {alert.reportCount}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Distinct reporters
+                              </p>
+
+                              <p className="mt-1 font-semibold">
+                                {alert.distinctReporterCount}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Time periods
+                              </p>
+
+                              <p className="mt-1 font-semibold">
+                                {alert.distinctTimeWindowCount}
+                              </p>
+                            </div>
                           </div>
 
-                          <div className="shrink-0 text-left sm:text-right">
-                            <p className="text-2xl font-semibold">
-                              {Math.round(
-                                alert.confidenceScore *
-                                  100,
-                              )}
-                              %
-                            </p>
+                          <Separator className="my-5" />
 
-                            <p className="text-xs text-muted-foreground">
-                              confidence
-                            </p>
+                          <div className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                              <div className="flex items-center gap-2">
+                                <Clock3 className="size-4" />
+
+                                <span>
+                                  Detected{" "}
+                                  {formatDate(
+                                    alert.firstDetectedAt,
+                                  )}
+                                </span>
+                              </div>
+
+                              <span className="truncate">
+                                Zone:{" "}
+                                {alert.locationHash}
+                              </span>
+                            </div>
+
+                            {actionButtons.length > 0 && (
+                              <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+                                {actionButtons.map(
+                                  (button) => {
+                                    const actionKey =
+                                      `${alert.id}:${button.action}`;
+
+                                    const isActive =
+                                      activeAction ===
+                                      actionKey;
+
+                                    return (
+                                      <Button
+                                        key={
+                                          button.action
+                                        }
+                                        variant={
+                                          button.variant
+                                        }
+                                        className="rounded-xl"
+                                        disabled={
+                                          activeAction !==
+                                          null
+                                        }
+                                        onClick={() =>
+                                          void handleAction(
+                                            alert.id,
+                                            button.action,
+                                          )
+                                        }
+                                      >
+                                        {isActive
+                                          ? "Updating..."
+                                          : button.label}
+                                      </Button>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            )}
+
+                            {(alert.status ===
+                              "resolved" ||
+                              alert.status ===
+                                "dismissed") && (
+                              <div className="rounded-xl bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+                                This alert is{" "}
+                                {alert.status} and is
+                                now read-only.
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </CardHeader>
-
-                      <CardContent>
-                        {alert.description && (
-                          <p className="text-sm leading-6 text-muted-foreground">
-                            {alert.description}
-                          </p>
-                        )}
-
-                        <Separator className="my-5" />
-
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              Reports
-                            </p>
-
-                            <p className="mt-1 font-semibold">
-                              {alert.reportCount}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              Distinct reporters
-                            </p>
-
-                            <p className="mt-1 font-semibold">
-                              {alert.distinctReporterCount}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              Time periods
-                            </p>
-
-                            <p className="mt-1 font-semibold">
-                              {alert.distinctTimeWindowCount}
-                            </p>
-                          </div>
-                        </div>
-
-                        <Separator className="my-5" />
-
-                        <div className="flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex items-center gap-2">
-                            <Clock3 className="size-4" />
-
-                            <span>
-                              Detected{" "}
-                              {formatDate(
-                                alert.firstDetectedAt,
-                              )}
-                            </span>
-                          </div>
-
-                          <span className="truncate">
-                            Zone:{" "}
-                            {alert.locationHash}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ),
+                        </CardContent>
+                      </Card>
+                    );
+                  },
                 )}
               </div>
             )}
