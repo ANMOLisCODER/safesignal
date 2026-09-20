@@ -48,8 +48,7 @@ export const reports = pgTable("reports", {
 
   description: text("description"),
 
-  latitude: real("latitude"),
-  longitude: real("longitude"),
+  
 
   locationHash: text("location_hash").notNull(),
 

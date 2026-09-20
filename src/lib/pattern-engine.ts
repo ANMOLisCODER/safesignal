@@ -8,11 +8,18 @@ import {
 
 const WINDOW_DAYS = 7;
 
+const RECENT_WINDOW_HOURS = 24;
+
 const MIN_REPORTS = 3;
 
 const MIN_DISTINCT_REPORTERS = 2;
 
 const MIN_DISTINCT_TIME_WINDOWS = 2;
+
+type TrendDirection =
+  | "rising"
+  | "stable"
+  | "falling";
 
 type PatternAnalysis = {
   locationHash: string;
@@ -22,6 +29,10 @@ type PatternAnalysis = {
   categoryConsistency: number;
   duplicateRate: number;
   averageAbuseScore: number;
+  recentReportCount: number;
+  baselineDailyReportRate: number;
+  velocityMultiplier: number;
+  trendDirection: TrendDirection;
   confidenceScore: number;
   severity:
     | "low"
@@ -107,6 +118,68 @@ function calculateCategoryConsistency(
   return highestCount / categories.length;
 }
 
+function calculateVelocity(
+  recentReportCount: number,
+  historicalReportCount: number,
+) {
+  const historicalDays =
+    WINDOW_DAYS -
+    RECENT_WINDOW_HOURS / 24;
+
+  const baselineDailyRate =
+    historicalReportCount /
+    historicalDays;
+
+  const recentDailyRate =
+    recentReportCount /
+    (RECENT_WINDOW_HOURS / 24);
+
+  if (baselineDailyRate === 0) {
+    if (recentReportCount > 0) {
+      return {
+        baselineDailyReportRate: 0,
+        velocityMultiplier: 5,
+        trendDirection:
+          "rising" as TrendDirection,
+      };
+    }
+
+    return {
+      baselineDailyReportRate: 0,
+      velocityMultiplier: 1,
+      trendDirection:
+        "stable" as TrendDirection,
+    };
+  }
+
+  const velocityMultiplier =
+    recentDailyRate /
+    baselineDailyRate;
+
+  let trendDirection:
+    | TrendDirection = "stable";
+
+  if (velocityMultiplier >= 1.5) {
+    trendDirection = "rising";
+  } else if (
+    velocityMultiplier <= 0.75
+  ) {
+    trendDirection = "falling";
+  }
+
+  return {
+    baselineDailyReportRate:
+      Number(
+        baselineDailyRate.toFixed(3),
+      ),
+    velocityMultiplier:
+      Number(
+        velocityMultiplier.toFixed(3),
+      ),
+    trendDirection,
+  };
+}
+
 function calculateConfidence(
   reportCount: number,
   distinctReporterCount: number,
@@ -114,6 +187,7 @@ function calculateConfidence(
   categoryConsistency: number,
   duplicateRate: number,
   averageAbuseScore: number,
+  velocityMultiplier: number,
 ) {
   const reportSignal = clamp(
     reportCount / 10,
@@ -131,6 +205,13 @@ function calculateConfidence(
     reporterSignal * 0.5 +
     timeSignal * 0.5;
 
+  const velocitySignal = clamp(
+    Math.max(
+      velocityMultiplier - 1,
+      0,
+    ) / 4,
+  );
+
   const duplicatePenalty =
     clamp(duplicateRate) * 0.2;
 
@@ -138,10 +219,11 @@ function calculateConfidence(
     clamp(averageAbuseScore) * 0.2;
 
   const rawScore =
-    reportSignal * 0.2 +
-    diversitySignal * 0.35 +
-    categoryConsistency * 0.25 +
-    0.2 -
+    reportSignal * 0.18 +
+    diversitySignal * 0.32 +
+    categoryConsistency * 0.22 +
+    velocitySignal * 0.13 +
+    0.15 -
     duplicatePenalty -
     abusePenalty;
 
@@ -153,14 +235,26 @@ function calculateConfidence(
 export async function analyzeLocationPattern(
   locationHash: string,
 ): Promise<PatternAnalysis | null> {
-  const since = new Date(
-    Date.now() -
-      WINDOW_DAYS *
-        24 *
-        60 *
-        60 *
-        1000,
-  );
+  const now = new Date();
+
+  const windowStart =
+    new Date(
+      now.getTime() -
+        WINDOW_DAYS *
+          24 *
+          60 *
+          60 *
+          1000,
+    );
+
+  const recentWindowStart =
+    new Date(
+      now.getTime() -
+        RECENT_WINDOW_HOURS *
+          60 *
+          60 *
+          1000,
+    );
 
   const locationReports =
     await db
@@ -186,7 +280,7 @@ export async function analyzeLocationPattern(
           ),
           gte(
             reports.occurredAt,
-            since,
+            windowStart,
           ),
         ),
       )
@@ -260,6 +354,23 @@ export async function analyzeLocationPattern(
     totalAbuseScore /
     locationReports.length;
 
+  const recentReportCount =
+    locationReports.filter(
+      (report) =>
+        report.occurredAt >=
+        recentWindowStart,
+    ).length;
+
+  const historicalReportCount =
+    locationReports.length -
+    recentReportCount;
+
+  const velocity =
+    calculateVelocity(
+      recentReportCount,
+      historicalReportCount,
+    );
+
   const distinctReporterCount =
     distinctReporterSet.size;
 
@@ -288,6 +399,7 @@ export async function analyzeLocationPattern(
       categoryConsistency,
       duplicateRate,
       averageAbuseScore,
+      velocity.velocityMultiplier,
     );
 
   return {
@@ -299,6 +411,13 @@ export async function analyzeLocationPattern(
     categoryConsistency,
     duplicateRate,
     averageAbuseScore,
+    recentReportCount,
+    baselineDailyReportRate:
+      velocity.baselineDailyReportRate,
+    velocityMultiplier:
+      velocity.velocityMultiplier,
+    trendDirection:
+      velocity.trendDirection,
     confidenceScore,
     severity:
       getSeverity(
@@ -328,16 +447,24 @@ export async function createOrUpdatePatternAlert(
       .limit(1);
 
   const title =
-    "Emerging safety pattern detected";
+    analysis.trendDirection ===
+    "rising"
+      ? "Rising safety pattern detected"
+      : "Emerging safety pattern detected";
 
   const description =
     `SafeSignal detected ` +
-    `${analysis.reportCount} reports ` +
-    `from ${analysis.distinctReporterCount} ` +
+    `${analysis.reportCount} reports from ` +
+    `${analysis.distinctReporterCount} ` +
     `distinct anonymous reporter sessions ` +
-    `across ${analysis.distinctTimeWindowCount} ` +
+    `across ` +
+    `${analysis.distinctTimeWindowCount} ` +
     `time periods within the last ` +
-    `${WINDOW_DAYS} days.`;
+    `${WINDOW_DAYS} days. ` +
+    `Recent activity: ` +
+    `${analysis.recentReportCount} reports in ` +
+    `the last ${RECENT_WINDOW_HOURS} hours. ` +
+    `Trend: ${analysis.trendDirection}.`;
 
   if (existingAlert.length > 0) {
     const updated =

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import {
   ArrowLeft,
@@ -12,14 +13,118 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { LocationPicker } from "@/components/report/location-picker";
 
 type LocationMethod = "current" | "manual" | null;
 
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
+
 export default function ReportLocationPage() {
+  const searchParams = useSearchParams();
+  const category = searchParams.get("category");
+
   const [locationMethod, setLocationMethod] =
     useState<LocationMethod>(null);
 
-  const canContinue = locationMethod !== null;
+  const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const canContinue =
+    locationMethod !== null &&
+    Boolean(category) &&
+    (locationMethod === "manual" || coordinates !== null);
+
+  function handleCurrentLocation() {
+    setLocationMethod("current");
+    setCoordinates(null);
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError(
+        "Location services are not supported by this browser.",
+      );
+      return;
+    }
+
+    setIsLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        setIsLocating(false);
+      },
+      (error) => {
+        setCoordinates(null);
+        setIsLocating(false);
+
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError(
+              "Location permission was denied. Please allow location access or choose a location manually.",
+            );
+            break;
+
+          case error.POSITION_UNAVAILABLE:
+            setLocationError(
+              "Your location could not be determined. Please try again or choose a location manually.",
+            );
+            break;
+
+          case error.TIMEOUT:
+            setLocationError(
+              "Location request timed out. Please try again.",
+            );
+            break;
+
+          default:
+            setLocationError(
+              "Unable to determine your location. Please try again.",
+            );
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000,
+      },
+    );
+  }
+
+  function handleManualLocation() {
+    setLocationMethod("manual");
+    setCoordinates(null);
+    setLocationError(null);
+  }
+
+  function handleContinue() {
+    if (!canContinue || !category || !locationMethod) {
+      return;
+    }
+
+    if (!coordinates) {
+      return;
+    }
+
+    sessionStorage.setItem(
+      "safesignal-report-draft",
+      JSON.stringify({
+        category,
+        locationMethod,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      }),
+    );
+
+    window.location.href = "/report/details";
+  }
 
   return (
     <main className="min-h-svh bg-background">
@@ -64,7 +169,7 @@ export default function ReportLocationPage() {
               <CardContent className="p-0">
                 <button
                   type="button"
-                  onClick={() => setLocationMethod("current")}
+                  onClick={handleCurrentLocation}
                   aria-pressed={locationMethod === "current"}
                   className="flex min-h-24 w-full items-center gap-4 p-5 text-left"
                 >
@@ -89,7 +194,11 @@ export default function ReportLocationPage() {
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Share your approximate location for this safety signal.
+                      {isLocating
+                        ? "Getting your approximate location..."
+                        : coordinates && locationMethod === "current"
+                          ? "Location detected successfully."
+                          : "Share your approximate location for this safety signal."}
                     </p>
                   </div>
 
@@ -109,7 +218,7 @@ export default function ReportLocationPage() {
               <CardContent className="p-0">
                 <button
                   type="button"
-                  onClick={() => setLocationMethod("manual")}
+                  onClick={handleManualLocation}
                   aria-pressed={locationMethod === "manual"}
                   className="flex min-h-24 w-full items-center gap-4 p-5 text-left"
                 >
@@ -145,20 +254,59 @@ export default function ReportLocationPage() {
             </Card>
           </div>
 
+          {locationMethod === "manual" && (
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-medium">
+                Select the approximate area
+              </p>
+
+              <LocationPicker
+                value={coordinates}
+                onChange={(nextCoordinates) => {
+                  setCoordinates(nextCoordinates);
+                  setLocationError(null);
+                }}
+              />
+
+              {coordinates && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Area selected. SafeSignal will convert this into a
+                  privacy-safe safety zone before storing it.
+                </p>
+              )}
+            </div>
+          )}
+
+          {locationError && (
+            <div
+              role="alert"
+              className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+            >
+              {locationError}
+            </div>
+          )}
+
+          {coordinates && locationMethod === "current" && (
+            <div className="mt-4 rounded-2xl border bg-muted/30 p-4">
+              <p className="text-sm font-medium">
+                Approximate location detected
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Your exact coordinates will be converted into a privacy-safe
+                safety area before being used for pattern detection.
+              </p>
+            </div>
+          )}
+
           <div className="mt-8">
             <Button
               size="lg"
               className="w-full rounded-xl"
-              disabled={!canContinue}
-              onClick={() => {
-                if (!canContinue) {
-                  return;
-                }
-
-                window.location.href = "/report/details";
-              }}
+              disabled={!canContinue || isLocating}
+              onClick={handleContinue}
             >
-              Continue
+              {isLocating ? "Getting location..." : "Continue"}
               <ArrowRight className="size-4" />
             </Button>
           </div>

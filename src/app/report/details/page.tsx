@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,10 +15,142 @@ import { Textarea } from "@/components/ui/textarea";
 
 const MAX_LENGTH = 500;
 
+const validCategories = [
+  "harassment",
+  "loitering",
+  "unsafe_behavior",
+  "stalking",
+  "verbal_abuse",
+  "threat",
+  "other",
+] as const;
+
+type ReportCategory = (typeof validCategories)[number];
+
+type ReportDraft = {
+  category: ReportCategory;
+  locationMethod: "current" | "manual";
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export default function ReportDetailsPage() {
+  const [draft, setDraft] = useState<ReportDraft | null>(null);
   const [details, setDetails] = useState("");
+  const [isLoadingDraft, setIsLoadingDraft] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const remainingCharacters = MAX_LENGTH - details.length;
+
+  useEffect(() => {
+    try {
+      const storedDraft = sessionStorage.getItem(
+        "safesignal-report-draft",
+      );
+
+      if (!storedDraft) {
+        setSubmitError(
+          "Your report session could not be found. Please start again.",
+        );
+        return;
+      }
+
+      const parsed = JSON.parse(storedDraft) as Partial<ReportDraft>;
+
+      const validCategory = validCategories.includes(
+        parsed.category as ReportCategory,
+      );
+
+      const validLocationMethod =
+        parsed.locationMethod === "current" ||
+        parsed.locationMethod === "manual";
+
+      if (!validCategory || !validLocationMethod) {
+        setSubmitError(
+          "Your report details are incomplete. Please start again.",
+        );
+        return;
+      }
+
+      setDraft({
+        category: parsed.category as ReportCategory,
+        locationMethod:
+          parsed.locationMethod as "current" | "manual",
+        latitude:
+          typeof parsed.latitude === "number"
+            ? parsed.latitude
+            : null,
+        longitude:
+          typeof parsed.longitude === "number"
+            ? parsed.longitude
+            : null,
+      });
+    } catch {
+      setSubmitError(
+        "Unable to read your report session. Please start again.",
+      );
+    } finally {
+      setIsLoadingDraft(false);
+    }
+  }, []);
+
+  async function handleSubmit() {
+    if (!draft || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const storageKey = "safesignal-anonymous-session";
+
+      let anonymousSessionId = sessionStorage.getItem(storageKey);
+
+      if (!anonymousSessionId) {
+        anonymousSessionId = crypto.randomUUID();
+        sessionStorage.setItem(storageKey, anonymousSessionId);
+      }
+
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          category: draft.category,
+          description: details.trim() || null,
+          latitude: draft.latitude,
+          longitude: draft.longitude,
+          reporterSessionId: anonymousSessionId,
+          occurredAt: new Date().toISOString(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || "Unable to submit report.",
+        );
+      }
+
+      sessionStorage.removeItem("safesignal-report-draft");
+
+      window.location.href = "/report/success";
+    } catch (error) {
+      console.error("Report submission failed:", error);
+
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to submit your report. Please try again.",
+      );
+
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <main className="min-h-svh bg-background">
@@ -59,16 +191,21 @@ export default function ReportDetailsPage() {
             <Textarea
               id="details"
               value={details}
-              onChange={(event) => setDetails(event.target.value.slice(0, MAX_LENGTH))}
+              onChange={(event) =>
+                setDetails(
+                  event.target.value.slice(0, MAX_LENGTH),
+                )
+              }
               placeholder="For example: I noticed this happening repeatedly near the station entrance..."
               className="mt-3 min-h-36 resize-none rounded-2xl p-4"
               maxLength={MAX_LENGTH}
+              disabled={isLoadingDraft || isSubmitting}
             />
 
             <div className="mt-2 flex justify-between gap-4 text-xs text-muted-foreground">
               <span>
-                Please don't include names, phone numbers, addresses, or other
-                identifying information.
+                Please don't include names, phone numbers, addresses, or
+                other identifying information.
               </span>
 
               <span className="shrink-0">
@@ -94,15 +231,29 @@ export default function ReportDetailsPage() {
             </div>
           </div>
 
+          {submitError && (
+            <div
+              role="alert"
+              className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+            >
+              {submitError}
+            </div>
+          )}
+
           <div className="mt-8">
             <Button
               size="lg"
               className="w-full rounded-xl"
-              onClick={() => {
-                window.location.href = "/report/success";
-              }}
+              disabled={
+                !draft ||
+                isLoadingDraft ||
+                isSubmitting
+              }
+              onClick={handleSubmit}
             >
-              Submit anonymous signal
+              {isSubmitting
+                ? "Submitting..."
+                : "Submit anonymous signal"}
               <ArrowRight className="size-4" />
             </Button>
           </div>
