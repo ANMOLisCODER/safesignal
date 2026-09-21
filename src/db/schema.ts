@@ -26,6 +26,17 @@ export const reportStatusEnum = pgEnum("report_status", [
   "dismissed",
 ]);
 
+export const moderationStatusEnum = pgEnum(
+  "moderation_status",
+  [
+    "pending",
+    "approved",
+    "flagged",
+    "blocked",
+    "error",
+  ],
+);
+
 export const alertSeverityEnum = pgEnum("alert_severity", [
   "low",
   "medium",
@@ -33,13 +44,16 @@ export const alertSeverityEnum = pgEnum("alert_severity", [
   "critical",
 ]);
 
-export const patternAlertStatusEnum = pgEnum("pattern_alert_status", [
-  "new",
-  "acknowledged",
-  "investigating",
-  "resolved",
-  "dismissed",
-]);
+export const patternAlertStatusEnum = pgEnum(
+  "pattern_alert_status",
+  [
+    "new",
+    "acknowledged",
+    "investigating",
+    "resolved",
+    "dismissed",
+  ],
+);
 
 export const reports = pgTable("reports", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -48,11 +62,11 @@ export const reports = pgTable("reports", {
 
   description: text("description"),
 
-  
-
   locationHash: text("location_hash").notNull(),
+
   zoneLatitude: real("zone_latitude"),
-zoneLongitude: real("zone_longitude"),
+
+  zoneLongitude: real("zone_longitude"),
 
   occurredAt: timestamp("occurred_at", {
     withTimezone: true,
@@ -83,6 +97,22 @@ zoneLongitude: real("zone_longitude"),
   abuseScore: real("abuse_score")
     .default(0)
     .notNull(),
+
+  moderationStatus: moderationStatusEnum(
+    "moderation_status",
+  )
+    .default("pending")
+    .notNull(),
+
+  moderationScore: real("moderation_score")
+    .default(0)
+    .notNull(),
+
+  moderationReason: text("moderation_reason"),
+
+  piiDetected: boolean("pii_detected")
+    .default(false)
+    .notNull(),
 });
 
 export const patternAlerts = pgTable("pattern_alerts", {
@@ -93,6 +123,8 @@ export const patternAlerts = pgTable("pattern_alerts", {
   title: text("title").notNull(),
 
   description: text("description"),
+
+  aiExplanation: text("ai_explanation"),
 
   severity: alertSeverityEnum("severity")
     .default("low")
@@ -106,11 +138,15 @@ export const patternAlerts = pgTable("pattern_alerts", {
     .default(0)
     .notNull(),
 
-  distinctReporterCount: integer("distinct_reporter_count")
+  distinctReporterCount: integer(
+    "distinct_reporter_count",
+  )
     .default(0)
     .notNull(),
 
-  distinctTimeWindowCount: integer("distinct_time_window_count")
+  distinctTimeWindowCount: integer(
+    "distinct_time_window_count",
+  )
     .default(0)
     .notNull(),
 

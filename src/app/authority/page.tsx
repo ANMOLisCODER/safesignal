@@ -66,6 +66,13 @@ type ActionResponse = {
   error?: string;
 };
 
+type ExplanationResponse = {
+  success: boolean;
+  explanation?: string | null;
+  cached?: boolean;
+  error?: string;
+};
+
 function severityClass(
   severity: AlertSeverity,
 ) {
@@ -198,6 +205,15 @@ export default function AuthorityDashboardPage() {
   const [activeAction, setActiveAction] =
     useState<string | null>(null);
 
+    const [explanations, setExplanations] =
+  useState<Record<string, string>>({});
+
+const [loadingExplanation, setLoadingExplanation] =
+  useState<string | null>(null);
+
+const [explanationError, setExplanationError] =
+  useState<string | null>(null);
+
   const loadAlerts = useCallback(
     async () => {
       try {
@@ -313,6 +329,57 @@ export default function AuthorityDashboardPage() {
       setActiveAction(null);
     }
   }
+
+  async function handleExplanation(
+  alertId: string,
+) {
+  setLoadingExplanation(alertId);
+  setExplanationError(null);
+
+  try {
+    const response = await fetch(
+      `/api/authority/alerts/${alertId}/explanation`,
+      {
+        method: "POST",
+      },
+    );
+
+    const result =
+      (await response.json()) as ExplanationResponse;
+
+    if (
+      !response.ok ||
+      !result.success ||
+      !result.explanation
+    ) {
+      throw new Error(
+        result.error ??
+          "Unable to generate AI explanation.",
+      );
+    }
+
+    setExplanations(
+      (current) => ({
+        ...current,
+        [alertId]:
+          result.explanation!,
+      }),
+    );
+  } catch (requestError) {
+    console.error(
+      "AI explanation request failed:",
+      requestError,
+    );
+
+    setExplanationError(
+      requestError instanceof Error
+        ? requestError.message
+        : "Unable to generate AI explanation.",
+    );
+  } finally {
+    setLoadingExplanation(null);
+  }
+}
 
   const activeAlerts =
     alerts.filter(
@@ -509,6 +576,22 @@ export default function AuthorityDashboardPage() {
             </Card>
           )}
 
+          {explanationError && (
+  <Card className="mb-4 rounded-2xl border-destructive/30 bg-destructive/5">
+    <CardContent className="p-5">
+      <p className="font-medium text-destructive">
+        AI explanation failed
+      </p>
+
+      <p className="mt-1 text-sm text-muted-foreground">
+        {explanationError}
+      </p>
+    </CardContent>
+  </Card>
+)}
+
+
+
           {isLoading && !error && (
             <div className="grid gap-4">
               {[1, 2].map(
@@ -619,6 +702,60 @@ export default function AuthorityDashboardPage() {
                               {alert.description}
                             </p>
                           )}
+
+                          <div className="mt-5 rounded-2xl border bg-muted/20 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="font-medium">
+                                  AI pattern explanation
+                                </p>
+
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                  Explain why SafeSignal detected this pattern
+                                  using the calculated safety signals.
+                                </p>
+                              </div>
+
+                              {!explanations[alert.id] && (
+                                <Button
+                                  variant="outline"
+                                  className="rounded-xl"
+                                  onClick={() =>
+                                    void handleExplanation(alert.id)
+                                  }
+                                  disabled={
+                                    loadingExplanation !== null
+                                  }
+                                >
+                                  {loadingExplanation === alert.id
+                                    ? "Generating..."
+                                    : "Explain with AI"}
+                                </Button>
+                              )}
+                            </div>
+
+                            {explanations[alert.id] && (
+                              <div className="mt-4 rounded-xl border bg-background p-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="size-2 rounded-full bg-primary" />
+
+                                  <p className="text-sm font-medium">
+                                    Why this alert was raised
+                                  </p>
+                                </div>
+
+                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                                  {explanations[alert.id]}
+                                </p>
+
+                                <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+                                  Generated from SafeSignal's calculated pattern
+                                  metrics. The pattern engine remains the source
+                                  of truth.
+                                </p>
+                              </div>
+                            )}
+                          </div>
 
                           <Separator className="my-5" />
 

@@ -1,0 +1,1 @@
+ALTER TABLE "pattern_alerts" ADD COLUMN "ai_explanation" text;
