@@ -1,8 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +14,21 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { LocationPicker } from "@/components/report/location-picker";
+
+const LocationPicker = dynamic(
+  () =>
+    import("@/components/report/location-picker").then(
+      (module) => module.LocationPicker,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-80 w-full items-center justify-center rounded-2xl border bg-muted/30 text-sm text-muted-foreground">
+        Loading map...
+      </div>
+    ),
+  },
+);
 
 type LocationMethod = "current" | "manual" | null;
 
@@ -23,15 +38,24 @@ type Coordinates = {
 };
 
 export default function ReportLocationPage() {
-  const searchParams = useSearchParams();
-  const category = searchParams.get("category");
+  const router = useRouter();
+
+  const [category, setCategory] = useState<string | null>(null);
 
   const [locationMethod, setLocationMethod] =
     useState<LocationMethod>(null);
 
-  const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
+  const [coordinates, setCoordinates] =
+    useState<Coordinates | null>(null);
+
   const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationError, setLocationError] =
+    useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setCategory(params.get("category"));
+  }, []);
 
   const canContinue =
     locationMethod !== null &&
@@ -123,7 +147,7 @@ export default function ReportLocationPage() {
       }),
     );
 
-    window.location.href = "/report/details";
+    router.push("/report/details");
   }
 
   return (
@@ -196,7 +220,8 @@ export default function ReportLocationPage() {
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
                       {isLocating
                         ? "Getting your approximate location..."
-                        : coordinates && locationMethod === "current"
+                        : coordinates &&
+                            locationMethod === "current"
                           ? "Location detected successfully."
                           : "Share your approximate location for this safety signal."}
                     </p>
@@ -293,8 +318,9 @@ export default function ReportLocationPage() {
               </p>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Your exact coordinates will be converted into a privacy-safe
-                safety area before being used for pattern detection.
+                Your exact coordinates will be converted into a
+                privacy-safe safety area before being used for pattern
+                detection.
               </p>
             </div>
           )}
