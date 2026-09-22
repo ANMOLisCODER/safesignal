@@ -133,8 +133,9 @@ export async function POST(request: Request) {
       ],
 
       temperature: 0.4,
-      max_completion_tokens: 500,
-      include_reasoning: false,
+max_completion_tokens: 800,
+reasoning_effort: "low",
+include_reasoning: false,
     });
 
     const content =
